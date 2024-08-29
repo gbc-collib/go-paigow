@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	HeartsIcon   = "♥"
-	DiamondsIcon = "♦"
-	ClubsIcon    = "♣"
-	SpadesIcon   = "♠"
+	HeartsIcon   = "H"
+	DiamondsIcon = "D"
+	ClubsIcon    = "C"
+	SpadesIcon   = "S"
 )
 
 type GameState int
@@ -26,22 +26,11 @@ const (
 	StateGameOver
 )
 
-func printCard(card *game.Card) {
-	valueStr := game.ValueToString(card.Value)
-	suitStr := game.SuitToString(card.Suit)
-
-	if card.Value == 10 {
-		valueStr = "10"
-	}
-
-	fmt.Printf(" _____ \n")
-	fmt.Printf("|%s%4s|\n", valueStr, " ")
-	fmt.Printf("| %s   |\n", suitStr)
-	fmt.Printf("|     |\n")
-	fmt.Printf("| %s   |\n", suitStr)
-	fmt.Printf("|%4s%s|\n", " ", valueStr)
-	fmt.Printf("|_____| \n\n")
-}
+const (
+	mainHandY = 0
+	highHandY = 10
+	lowHandY  = 20
+)
 
 func getCardAscii(card *game.Card) []string {
 	var topRow, middleRow, middleRow2, middleRow3, bottomRow, bottomRow2 string
@@ -55,11 +44,10 @@ func getCardAscii(card *game.Card) []string {
 
 		topRow = " _____ "
 		middleRow = fmt.Sprintf("|%s%4s|", valueStr, " ")
-		middleRow2 = fmt.Sprintf("| %s |", suitStr)
-		middleRow3 = fmt.Sprintf("| %s |", suitStr)
+		middleRow2 = fmt.Sprintf("|  %s  |", suitStr)
+		middleRow3 = fmt.Sprintf("|  %s  |", suitStr)
 		bottomRow = fmt.Sprintf("|%4s%s|", " ", valueStr)
 		bottomRow2 = "|_____|"
-
 	}
 
 	handBuffer := []string{
@@ -73,7 +61,7 @@ func getCardAscii(card *game.Card) []string {
 	return handBuffer
 }
 
-func renderHand(hand []*game.Card, hover int) {
+func renderHand(hand []*game.Card, hover, startY int) {
 	for index, card := range hand {
 		var handBuffer []string
 		if card != nil {
@@ -86,19 +74,28 @@ func renderHand(hand []*game.Card, hover int) {
 			if index == hover {
 				color = termbox.ColorGreen
 			}
-			printText(index*len(line), y, color, line)
+			printText(index*len(line), y+startY, color, line)
 		}
 	}
 	termbox.Flush()
 }
 
+func renderAllHands(player *game.Player, hover int) {
+	//Render Player Hand
+	renderHand(player.Hand[:], hover, mainHandY)
+	//Render High Hand
+	renderHand(player.HighHand[:], hover-7, highHandY)
+	//Render Low Hand
+	renderHand(player.LowHand[:], hover-12, lowHandY)
+}
+
 func getEmptyCardAscii() []string {
 	var topRow, middleRow, middleRow2, middleRow3, bottomRow, bottomRow2 string
 	topRow = " _____ "
-	middleRow = fmt.Sprintf("|%s%4s|", " ", " ")
-	middleRow2 = fmt.Sprintf("| %s |", " ")
-	middleRow3 = fmt.Sprintf("| %s |", " ")
-	bottomRow = fmt.Sprintf("|%4s%s|", " ", " ")
+	middleRow = fmt.Sprintf("|%5s|", " ")
+	middleRow2 = fmt.Sprintf("| %3s |", " ")
+	middleRow3 = fmt.Sprintf("| %3s |", " ")
+	bottomRow = fmt.Sprintf("|%5s|", " ")
 	bottomRow2 = "|_____|"
 
 	handBuffer := []string{
@@ -134,12 +131,12 @@ func handleCardSelection(event termbox.Event, view *GameView, hand []*game.Card)
 	case termbox.KeyArrowLeft:
 		if view.Hover > 0 {
 			view.Hover--
-			renderHand(hand, view.Hover)
+			renderAllHands(view.Game.Players[0], view.Hover)
 		}
 	case termbox.KeyArrowRight:
-		if view.Hover < len(hand)-1 {
+		if view.Hover < 14-1 {
 			view.Hover++
-			renderHand(hand, view.Hover)
+			renderAllHands(view.Game.Players[0], view.Hover)
 		}
 	case termbox.KeyEnter:
 		view.Selected = append(view.Selected, view.Hover)
@@ -148,7 +145,29 @@ func handleCardSelection(event termbox.Event, view *GameView, hand []*game.Card)
 		view.Game.Players[0].MoveCards(&src,
 			&dest, []int{view.Hover})
 		// Handle selection logic here
-		renderHand(hand, view.Hover)
+		renderAllHands(view.Game.Players[0], view.Hover)
+	case termbox.KeyArrowDown:
+		if view.Hover <= 6 {
+			view.Hover += 7
+		} else if view.Hover <= 11 {
+			view.Hover += 5
+		} else {
+			//Break Since no re-render required
+			break
+		}
+		renderAllHands(view.Game.Players[0], view.Hover)
+
+	case termbox.KeyArrowUp:
+		if view.Hover >= 12 {
+			view.Hover -= 5
+		} else if view.Hover >= 7 {
+			view.Hover -= 7
+		} else {
+			//Break Since no re-render required
+			break
+		}
+		renderAllHands(view.Game.Players[0], view.Hover)
+
 	case termbox.KeyEsc:
 		view.State = StateGameOver
 		os.Exit(1)
@@ -168,7 +187,9 @@ func main() {
 	newGame.NewRound()
 	view := GameView{}
 	view.Game = newGame
-	renderHand(newGame.Players[0].Hand[:], 0)
+	renderHand(newGame.Players[0].Hand[:], 0, mainHandY)
+	renderHand(newGame.Players[0].HighHand[:], -1, highHandY)
+	renderHand(newGame.Players[0].LowHand[:], -1, lowHandY)
 	view.State = StateCardSelection
 	for {
 		event := termbox.PollEvent()
